@@ -1,0 +1,76 @@
+pipeline {
+    agent any
+
+    parameters {
+        string(name: 'TARGET_DIR', defaultValue: 'C:\\Users\\Capi\\Desktop\\test', description: 'Path of the directory to validate')
+    }
+
+    environment {
+        EXPECTED_STRUCTURE = """
+        logs
+        config
+        data
+        data\\output
+        """
+    }
+
+    stages {
+        stage('Setup') {
+            steps {
+                echo "Starting Directory Validation Pipeline"
+                echo "Target Directory: ${params.TARGET_DIR}"
+                echo "Expected Directory Structure:\n${EXPECTED_STRUCTURE.trim()}"
+            }
+        }
+
+        stage('Validate Directory Structure') {
+            steps {
+                script {
+                    // Read the expected directory structure
+                    def expectedStructure = EXPECTED_STRUCTURE.trim().split("\n").collect { it.trim() }
+                    def targetDir = params.TARGET_DIR
+
+                    // Scan the actual directory structure
+                    echo "Scanning the target directory structure..."
+                    def actualStructure = bat(
+                        script: """
+                        @echo off
+                        for /F "delims=" %%F in ('dir /s /b /ad "${targetDir}"') do echo %%~pF
+                        """,
+                        returnStdout: true
+                    ).trim().split("\n").collect { it.replaceAll("^\\\\", "").trim() }
+
+                    // Compare actual and expected structures
+                    echo "Comparing directory structures..."
+                    def missingDirs = expectedStructure - actualStructure
+                    def extraDirs = actualStructure - expectedStructure
+
+                    // Print results to console
+                    if (missingDirs.size() == 0 && extraDirs.size() == 0) {
+                        echo "Validation Passed: Directory structure matches the expected structure."
+                    } else {
+                        echo "Validation Results: Directory validation issues found."
+
+                        if (missingDirs.size() > 0) {
+                            echo "Missing Directories:"
+                            missingDirs.each { echo "- ${it}" }
+                        }
+                        if (extraDirs.size() > 0) {
+                            echo "Extra Directories:"
+                            extraDirs.each { echo "- ${it}" }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Directory validation completed!"
+        }
+        failure {
+            echo "Directory validation encountered issues but the build will not fail."
+        }
+    }
+}
